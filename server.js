@@ -28,7 +28,7 @@ app.post('/api/ia', async (req, res) => {
             return res.status(500).json({ error: "No se ha configurado AI_API_KEY en Render." });
         }
 
-        // Endpoint actualizado para Gemini 1.5 Flash
+        // URL corregida con el prefijo 'models/' requerido por la API de Google
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: {
@@ -45,7 +45,6 @@ app.post('/api/ia', async (req, res) => {
 
         const data = await response.json();
 
-        // Imprimir en los logs de Render para depuración si la API devuelve error
         if (data.error) {
             console.error("Error devuelto por la API de Gemini:", JSON.stringify(data.error));
             return res.status(500).json({ error: data.error.message || "Error devuelto por Gemini." });
