@@ -4,59 +4,60 @@ require('dotenv').config();
 
 const app = express();
 
-// Configurar CORS para permitir peticiones únicamente desde tu GitHub Pages (o abierto con '*')
-app.use(cors({
-    origin: '*' // O puedes poner: 'https://tu-usuario.github.io'
-}));
-
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Endpoint que llamará tu frontend
+app.get('/', (req, res) => {
+    res.send("Servidor SGS Backend Proxy activo.");
+});
+
 app.post('/api/ia', async (req, res) => {
     const { prompt } = req.body;
 
     if (!prompt) {
-        return res.status(400).json({ error: 'Falta el texto de consulta (prompt).' });
+        return res.status(400).json({ error: 'Falta la consulta.' });
     }
 
     try {
-        // La API Key se lee de forma segura desde las variables de entorno de Render
-        const apiKey = process.env.AI_API_KEY; 
+        const apiKey = process.env.AI_API_KEY;
 
-        // EJEMPLO: Llamada fetch a la API de OpenAI (puedes adaptarla a Google Gemini si prefieres)
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        if (!apiKey) {
+            return res.status(500).json({ error: "No se ha configurado AI_API_KEY en Render." });
+        }
+
+        // Llamada a Google Gemini API
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: "gpt-3.5-turbo",
-                messages: [
-                    { role: "system", content: "Eres un asistente experto en los manuales de servicio y maquinaria agrícola de Gimtrac." },
-                    { role: "user", content: prompt }
-                ],
-                max_tokens: 300
+                contents: [{
+                    parts: [{
+                        text: `Eres un asistente experto en manuales de servicio de maquinaria agrícola Gimtrac. Responde brevemente a la siguiente pregunta: ${prompt}`
+                    }]
+                }]
             })
         });
 
         const data = await response.json();
-        
-        if (data.choices && data.choices.length > 0) {
-            const respuestaIA = data.choices[0].message.content;
+
+        if (data.candidates && data.candidates.length > 0) {
+            const respuestaIA = data.candidates[0].content.parts[0].text;
             res.json({ respuesta: respuestaIA });
         } else {
+            console.error("Respuesta de la API:", data);
             res.status(500).json({ error: "La IA no devolvió una respuesta válida." });
         }
 
     } catch (error) {
-        console.error("Error en el servidor proxy:", error);
-        res.status(500).json({ error: "Error interno al procesar la consulta con la IA." });
+        console.error("Error en servidor proxy:", error);
+        res.status(500).json({ error: "Error interno en el servidor proxy." });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor proxy corriendo en el puerto ${PORT}`);
+    console.log(`Servidor proxy en puerto ${PORT}`);
 });
