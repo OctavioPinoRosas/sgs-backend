@@ -1,3 +1,25 @@
-"scripts": {
-  "start": "node server.js"
+{
+  "name": "sgs-backend",
+  "version": "1.0.0",
+  "description": "Backend proxy para IA en SGS Gimtrac",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OctavioPinoRosas/sgs-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/OctavioPinoRosas/sgs-backend/issues"
+  },
+  "homepage": "https://github.com/OctavioPinoRosas/sgs-backend#readme"
 }
