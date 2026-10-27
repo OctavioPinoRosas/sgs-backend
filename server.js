@@ -14,7 +14,7 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/ia', async (req, res) => {
-    const { prompt } = req.body;
+    const { prompt, contextoManuales } = req.body;
 
     if (!prompt) {
         return res.status(400).json({ error: 'Falta la consulta.' });
@@ -28,7 +28,24 @@ app.post('/api/ia', async (req, res) => {
             return res.status(500).json({ error: "No se ha configurado AI_API_KEY en Render." });
         }
 
-        // URL corregida con el prefijo 'models/' requerido por la API de Google
+        // Instrucción de sistema para restringir a la IA estrictamente a los manuales provistos
+        const systemInstruction = `
+Eres el Asistente IA del Sistema de Gestión del Servicio (SGS) de Gimtrac.
+Responde a la duda del usuario ÚNICAMENTE utilizando la información exacta provista en la siguiente lista de manuales/procedimientos:
+
+BASE DE DATOS DE MANUALES DISPONIBLES:
+${JSON.stringify(contextoManuales || [], null, 2)}
+
+REGLAS OBLIGATORIAS:
+1. Sé preciso, profesional y fundamenta numéricamente la respuesta si el manual contiene listas numeradas o procedimientos estandarizados.
+2. Identifica cuál es el ID del manual que contiene la respuesta y asígnalo en el campo 'manualId'.
+3. Debes devolver la respuesta estrictamente en un objeto JSON válido con la siguiente estructura exacta:
+{
+  "respuesta": "Texto detallado y fundamentado de la respuesta...",
+  "manualId": "ID_DEL_MANUAL_CONSULTADO"
+}
+        `;
+
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: {
@@ -37,9 +54,12 @@ app.post('/api/ia', async (req, res) => {
             body: JSON.stringify({
                 contents: [{
                     parts: [{
-                        text: `Eres un asistente experto en manuales de servicio de maquinaria agrícola Gimtrac. Responde brevemente a la siguiente pregunta del técnico u operador: ${prompt}`
+                        text: `${systemInstruction}\n\nPregunta del técnico u operador: ${prompt}`
                     }]
-                }]
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json"
+                }
             })
         });
 
@@ -51,8 +71,13 @@ app.post('/api/ia', async (req, res) => {
         }
 
         if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
-            const respuestaIA = data.candidates[0].content.parts[0].text;
-            res.json({ respuesta: respuestaIA });
+            const rawJson = data.candidates[0].content.parts[0].text;
+            const parsedResult = JSON.parse(rawJson);
+
+            res.json({
+                respuesta: parsedResult.respuesta,
+                manualId: parsedResult.manualId || null
+            });
         } else {
             console.error("Estructura de respuesta inesperada:", JSON.stringify(data));
             res.status(500).json({ error: "La IA no devolvió una respuesta válida." });
