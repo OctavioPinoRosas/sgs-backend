@@ -47,8 +47,8 @@ REGLAS OBLIGATORIAS:
 
         // Lista de modelos en orden de prioridad (si el primero falla por 503, intenta con los siguientes)
         const modelosDisponibles = [
-            'gemini-3.8-flash',
             'gemini-3.6-flash',
+            'gemini-3.8-flash',
             'gemini-2.5-flash'
         ];
 
