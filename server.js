@@ -28,7 +28,6 @@ app.post('/api/ia', async (req, res) => {
             return res.status(500).json({ error: "No se ha configurado AI_API_KEY en Render." });
         }
 
-        // Instrucción de sistema para restringir a la IA estrictamente a los manuales provistos
         const systemInstruction = `
 Eres el Asistente IA del Sistema de Gestión del Servicio (SGS) de Gimtrac.
 Responde a la duda del usuario ÚNICAMENTE utilizando la información exacta provista en la siguiente lista de manuales/procedimientos:
@@ -38,7 +37,7 @@ ${JSON.stringify(contextoManuales || [], null, 2)}
 
 REGLAS OBLIGATORIAS:
 1. Sé preciso, profesional y fundamenta numéricamente la respuesta si el manual contiene listas numeradas o procedimientos estandarizados.
-2. Identifica cuál es el ID del manual que contiene la respuesta y asígnalo en el campo 'manualId'.
+2. Identifica cuál es el ID del manual que contiene la respuesta y asígnalo en el campo 'manualId'. Si no pertenece a ninguno, déjalo como null.
 3. Debes devolver la respuesta estrictamente en un objeto JSON válido con la siguiente estructura exacta:
 {
   "respuesta": "Texto detallado y fundamentado de la respuesta...",
@@ -46,28 +45,51 @@ REGLAS OBLIGATORIAS:
 }
         `;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{
-                        text: `${systemInstruction}\n\nPregunta del técnico u operador: ${prompt}`
-                    }]
-                }],
-                generationConfig: {
-                    responseMimeType: "application/json"
-                }
-            })
-        });
+        // Lista de modelos en orden de prioridad (si el primero falla por 503, intenta con los siguientes)
+        const modelosDisponibles = [
+            'gemini-3.8-flash',
+            'gemini-3.6-flash',
+            'gemini-2.5-flash'
+        ];
 
-        const data = await response.json();
+        let data = null;
+        let modeloExitoso = '';
 
-        if (data.error) {
-            console.error("Error devuelto por la API de Gemini:", JSON.stringify(data.error));
-            return res.status(500).json({ error: data.error.message || "Error devuelto por Gemini." });
+        for (const modelo of modelosDisponibles) {
+            console.log(`Intentando conectar con el modelo: ${modelo}...`);
+            
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: `${systemInstruction}\n\nPregunta del técnico u operador: ${prompt}`
+                        }]
+                    }],
+                    generationConfig: {
+                        responseMimeType: "application/json"
+                    }
+                })
+            });
+
+            data = await response.json();
+
+            // Si la API responde sin error, salimos del ciclo
+            if (!data.error) {
+                modeloExitoso = modelo;
+                console.log(`¡Éxito con el modelo ${modelo}!`);
+                break;
+            } else {
+                console.warn(`Aviso: El modelo ${modelo} falló con código ${data.error.code}: ${data.error.message}`);
+            }
+        }
+
+        // Si después de probar todos los modelos hubo error (ej. 503 en todos)
+        if (!data || data.error) {
+            return res.status(503).json({ 
+                error: "El servicio de IA está experimentando alta demanda en este momento. Por favor, intenta de nuevo en unos segundos." 
+            });
         }
 
         if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
@@ -76,10 +98,10 @@ REGLAS OBLIGATORIAS:
 
             res.json({
                 respuesta: parsedResult.respuesta,
-                manualId: parsedResult.manualId || null
+                manualId: parsedResult.manualId || null,
+                modeloUtilizado: modeloExitoso
             });
         } else {
-            console.error("Estructura de respuesta inesperada:", JSON.stringify(data));
             res.status(500).json({ error: "La IA no devolvió una respuesta válida." });
         }
 
